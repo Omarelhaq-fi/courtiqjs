@@ -68,16 +68,37 @@ app.post('/api/login', async (req, res) => {
         const [rows] = await pool.query('SELECT * FROM users WHERE username = ?', [username]);
         if (rows.length > 0) {
             const user = rows[0];
-            const passwordIsValid = await bcrypt.compare(password, user.password_hash);
 
-            if (passwordIsValid) {
-                req.session.loggedin = true;
-                req.session.user_id = user.id;
-                req.session.username = user.username;
-                req.session.role = user.role;
-                res.json({ success: true, role: user.role });
+            // Check if the stored hash is the incorrect PHP string from the previous bug
+            if (user.password_hash.includes('<?php')) {
+                // This is the one-time fix logic for the admin account
+                if (username === 'Omarelhaq' && password === 'omarreda123') {
+                    // Password is correct, let's update the hash in the database to be secure
+                    const new_hash = await bcrypt.hash(password, 10);
+                    await pool.query("UPDATE users SET password_hash = ? WHERE id = ?", [new_hash, user.id]);
+                    
+                    // Now, log the user in
+                    req.session.loggedin = true;
+                    req.session.user_id = user.id;
+                    req.session.username = user.username;
+                    req.session.role = user.role;
+                    res.json({ success: true, role: user.role });
+                } else {
+                    res.json({ success: false, message: 'Invalid credentials' });
+                }
             } else {
-                res.json({ success: false, message: 'Invalid credentials' });
+                // This is the normal, secure login check for all future attempts
+                const passwordIsValid = await bcrypt.compare(password, user.password_hash);
+
+                if (passwordIsValid) {
+                    req.session.loggedin = true;
+                    req.session.user_id = user.id;
+                    req.session.username = user.username;
+                    req.session.role = user.role;
+                    res.json({ success: true, role: user.role });
+                } else {
+                    res.json({ success: false, message: 'Invalid credentials' });
+                }
             }
         } else {
             res.json({ success: false, message: 'Invalid credentials' });
