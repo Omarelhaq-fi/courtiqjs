@@ -1,0 +1,175 @@
+<header class="text-center mb-8">
+    <h1 class="text-4xl font-bold text-orange-500">Scouting Panel</h1>
+</header>
+
+<% if (teams.length > 0) { %>
+<div class="mb-6 bg-gray-800 p-4 rounded-lg">
+    <label for="team-select" class="mr-2 font-semibold">Select Team to Scout:</label>
+    <select id="team-select" onchange="loadContent('/coach/scouting-panel?team_id=' + this.value)" class="bg-gray-700 border-gray-600 rounded-md p-2 focus:ring-orange-500">
+        <% teams.forEach(team => { %>
+            <option value="<%= team.id %>" <%= team.id == selectedTeamId ? 'selected' : '' %>><%= team.name %></option>
+        <% }) %>
+    </select>
+</div>
+
+<div id="scoutingPanel" class="flex flex-wrap gap-4 justify-center">
+    <!-- Player cards will be injected here by the script -->
+</div>
+
+<div class="mt-8 text-center hidden" id="generate-report-container">
+    <button id="generateReportBtn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-8 rounded-md transition duration-300">Generate Report for Selected Player</button>
+</div>
+<% } else { %>
+    <p class="text-center text-gray-400 text-xl mt-10">You have not been assigned to any teams. Please contact an administrator.</p>
+<% } %>
+
+<!-- Modal for details -->
+<div id="detailModal" class="fixed top-0 left-0 w-full h-full bg-black bg-opacity-70 flex justify-center items-center hidden z-50">
+    <div class="bg-gray-800 p-8 rounded-lg text-center w-96">
+        <h3 id="modalTitle" class="text-xl font-semibold mb-6">Select Detail</h3>
+        <div id="modalBody" class="grid grid-cols-1 gap-4"></div>
+        <button id="cancelDetailBtn" class="mt-6 bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-md">Cancel</button>
+    </div>
+</div>
+
+<script id="scouting-panel-script" type="text/template">
+    // The full JS logic from your original 'scouting-panel.html' goes here,
+    // but with significant modifications to handle the new data structure.
+    const scoutingApp = {
+        allPlayersData: <%- JSON.stringify(players) %>,
+        scoutedPlayerData: null, // This will hold the data for the player being scouted
+        selectedPlayerId: null,
+
+        init() {
+            this.renderPlayerSelection();
+        },
+
+        renderPlayerSelection() {
+            const panel = document.getElementById('scoutingPanel');
+            if (!panel) return;
+            panel.innerHTML = this.allPlayersData.map(p => `
+                <div id="player-selector-${p.id}" class="bg-gray-800 p-4 rounded-lg cursor-pointer border-2 border-transparent hover:border-orange-500" onclick="scoutingApp.selectPlayer(${p.id})">
+                    <h3 class="text-lg font-bold">${p.name}</h3>
+                    <p class="text-sm text-gray-400">#${p.number}</p>
+                </div>
+            `).join('');
+        },
+
+        selectPlayer(playerId) {
+            this.selectedPlayerId = playerId;
+            const player = this.allPlayersData.find(p => p.id === playerId);
+            if (!player) return;
+
+            // Reset or initialize scouting data for this player
+            this.scoutedPlayerData = {
+                id: player.id, name: player.name, number: player.number,
+                minutes: 0, timerInterval: null, isTimerRunning: false, points: 0,
+                rebounds: 0, offensiveRebounds: 0, defensiveRebounds: 0, assists: 0,
+                steals: 0, blocks: 0, timesBlocked: 0, turnovers: 0,
+                turnoverDetails: { missPass: 0, stolen: 0, byBlock: 0, shotClock: 0, travelling: 0, doubleDribble: 0, outOfBounds: 0, backcourt: 0 },
+                personalFouls: 0,
+                foulDetails: { defensive: 0, offensive: 0, technical: 0, unsportsmanlike: 0 },
+                coachNotes: '', fg2a: 0, fg2m: 0, fg3a: 0, fg3m: 0, fta: 0, ftm: 0, shots: [],
+            };
+
+            // Highlight the selected player
+            document.querySelectorAll('[id^=player-selector-]').forEach(el => el.classList.remove('border-green-500'));
+            document.getElementById(`player-selector-${playerId}`).classList.add('border-green-500');
+
+            this.renderScoutingCard();
+        },
+
+        renderScoutingCard() {
+            const panel = document.getElementById('scoutingPanel');
+            const p = this.scoutedPlayerData;
+            panel.innerHTML = `
+                <div class="bg-gray-800 p-4 rounded-lg w-full">
+                    <!-- The full scouting card HTML from your original file goes here -->
+                    <!-- This is a simplified version for demonstration -->
+                    <div class="flex justify-between items-center border-b border-gray-600 pb-2 mb-4">
+                        <h3 class="text-2xl font-bold text-orange-400">${p.name} #${p.number}</h3>
+                        <button class="text-sm text-blue-400 hover:underline" onclick="scoutingApp.init()">Back to Player Selection</button>
+                    </div>
+                    <div class="grid grid-cols-3 gap-2 text-center">
+                        <div><p class="text-xl font-bold">${p.points}</p><p class="text-xs text-slate-400">Points</p></div>
+                        <div><p class="text-xl font-bold">${p.rebounds}</p><button class="text-xs bg-slate-600 w-full mt-1 py-1 rounded" onclick="scoutingApp.handleReboundClick()">REB</button></div>
+                        <div><p class="text-xl font-bold">${p.assists}</p><button class="text-xs bg-slate-600 w-full mt-1 py-1 rounded" onclick="scoutingApp.incrementStat('assists')">AST</button></div>
+                        <!-- ... more stats buttons -->
+                    </div>
+                    <div class="border-t border-slate-600 pt-3 mt-4">
+                        <h4 class="font-semibold mb-2 text-center">Shooting</h4>
+                        <div class="grid grid-cols-3 gap-2">
+                            <div class="p-1.5 rounded-md border border-slate-600 text-center">
+                                <p class="font-bold text-sm">2-PT</p><p class="text-base font-mono my-1">${p.fg2m}-${p.fg2a}</p>
+                                <div class="flex justify-center gap-1">
+                                    <button class="bg-green-500 text-white text-xs font-bold py-1 px-2 rounded" onclick="scoutingApp.handleShot('fg2', true)">M</button>
+                                    <button class="bg-red-500 text-white text-xs font-bold py-1 px-2 rounded" onclick="scoutingApp.handleShot('fg2', false)">X</button>
+                                </div>
+                            </div>
+                            <!-- ... more shooting buttons -->
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.getElementById('generate-report-container').classList.remove('hidden');
+            // Re-bind any necessary event listeners here if they don't use onclick
+        },
+
+        // --- All your other app logic functions (handleReboundClick, handleShot, etc.) go here ---
+        // --- Make sure they modify 'this.scoutedPlayerData' instead of searching an array ---
+        incrementStat(stat) {
+            if (!this.scoutedPlayerData) return;
+            this.scoutedPlayerData[stat]++;
+            this.renderScoutingCard(); // Re-render to show update
+        },
+        
+        // Example of an updated handler
+        handleReboundClick() {
+            if (!this.scoutedPlayerData) return;
+            // Your modal logic here...
+            // on selection:
+            // this.scoutedPlayerData[detail]++;
+            // this.scoutedPlayerData.rebounds++;
+            // this.renderScoutingCard();
+        },
+        
+        handleShot(type, made) {
+            if (!this.scoutedPlayerData) return;
+            // your modal logic for shot location...
+            // on selection:
+            // this.scoutedPlayerData[`${type}a`]++;
+            // if (made) { this.scoutedPlayerData[`${type}m`]++; ... }
+            // this.renderScoutingCard();
+        },
+
+        generateAndSaveReport() {
+            if (!this.scoutedPlayerData) {
+                alert('Please select a player to scout first.');
+                return;
+            }
+            const selectedTeam = document.getElementById('team-select');
+            const teamName = selectedTeam.options[selectedTeam.selectedIndex].text;
+
+            fetch('/coach/generate-report', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    reportData: [this.scoutedPlayerData], // Send as an array as the server expects
+                    teamName: teamName,
+                    playerId: this.selectedPlayerId
+                }),
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Report generated and saved successfully!');
+                    loadContent('/coach/reports', document.getElementById('nav-reports'));
+                } else {
+                    alert('Error saving report: ' + data.message);
+                }
+            })
+            .catch(err => console.error('Error:', err));
+        }
+    };
+    scoutingApp.init();
+</script>
