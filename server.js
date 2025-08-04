@@ -12,10 +12,10 @@ const app = express();
 // --- MySQL Connection ---
 // --- MySQL Connection (Manual Configuration) ---
 const db = mysql.createConnection({
-    host: 'mysql6013.site4now.net', // Replace with your actual host
-    user: 'abc901_courtiq',
-    password: 'omarreda123',
-    database: 'db_abc901_courtiq', // Replace with your actual DB name
+    host: 'sql112.infinityfree.com', // Replace with your actual host
+    user: 'if0_39626865',
+    password: 'mp6VQ6URz6E76',
+    database: 'if0_39626865_courtiqjs', // Replace with your actual DB name
     port: 3306
 });
 
