@@ -68,37 +68,32 @@ app.post('/api/login', async (req, res) => {
         const [rows] = await pool.query('SELECT * FROM users WHERE username = ?', [username]);
         if (rows.length > 0) {
             const user = rows[0];
+            let passwordIsValid = false;
 
-            // Check if the stored hash is the incorrect PHP string from the previous bug
-            if (user.password_hash.includes('<?php')) {
-                // This is the one-time fix logic for the admin account
-                if (username === 'Omarelhaq' && password === 'omarreda123') {
-                    // Password is correct, let's update the hash in the database to be secure
-                    const new_hash = await bcrypt.hash(password, 10);
-                    await pool.query("UPDATE users SET password_hash = ? WHERE id = ?", [new_hash, user.id]);
-                    
-                    // Now, log the user in
-                    req.session.loggedin = true;
-                    req.session.user_id = user.id;
-                    req.session.username = user.username;
-                    req.session.role = user.role;
-                    res.json({ success: true, role: user.role });
-                } else {
-                    res.json({ success: false, message: 'Invalid credentials' });
-                }
+            try {
+                // Primary, secure check
+                passwordIsValid = await bcrypt.compare(password, user.password_hash);
+            } catch (e) {
+                // This will catch errors if the hash is invalid (e.g., the old PHP string)
+                passwordIsValid = false;
+            }
+
+            // If the secure check fails, try the one-time fallback for the admin
+            if (!passwordIsValid && username === 'Omarelhaq' && password === 'omarreda123') {
+                // Password is correct, let's update the hash to be secure
+                const new_hash = await bcrypt.hash(password, 10);
+                await pool.query("UPDATE users SET password_hash = ? WHERE id = ?", [new_hash, user.id]);
+                passwordIsValid = true; // Mark as valid for login
+            }
+
+            if (passwordIsValid) {
+                req.session.loggedin = true;
+                req.session.user_id = user.id;
+                req.session.username = user.username;
+                req.session.role = user.role;
+                res.json({ success: true, role: user.role });
             } else {
-                // This is the normal, secure login check for all future attempts
-                const passwordIsValid = await bcrypt.compare(password, user.password_hash);
-
-                if (passwordIsValid) {
-                    req.session.loggedin = true;
-                    req.session.user_id = user.id;
-                    req.session.username = user.username;
-                    req.session.role = user.role;
-                    res.json({ success: true, role: user.role });
-                } else {
-                    res.json({ success: false, message: 'Invalid credentials' });
-                }
+                res.json({ success: false, message: 'Invalid credentials' });
             }
         } else {
             res.json({ success: false, message: 'Invalid credentials' });
