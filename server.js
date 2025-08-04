@@ -1,212 +1,251 @@
 // server.js
+
 const express = require('express');
-const mysql = require('mysql2/promise');
-const bodyParser = require('body-parser');
+const mysql = require('mysql');
 const session = require('express-session');
-const bcrypt = require('bcryptjs');
+const bodyParser = require('body-parser');
 const path = require('path');
+const ejs = require('ejs');
 
 const app = express();
-const port = process.env.PORT || 3000; // Hosting will provide the port
 
-// --- YOUR ACTION: REPLACE THESE VALUES ---
-const dbConfig = {
-    host: 'sql112.infinityfree.com', 
-    user: 'if0_39626865',
-    password: 'mp6VQ6URz6E76',
-    database: 'if0_39626865_courtiq'
-};
-// -----------------------------------------
+// --- MySQL Connection ---
+const db = mysql.createConnection(process.env.DATABASE_URL);
 
-// Middleware
-app.use(bodyParser.json());
+db.connect((err) => {
+    if (err) {
+        console.error('Error connecting to MySQL database:', err);
+        return;
+    }
+    console.log('Connected to MySQL database');
+});
+
+// --- Middleware ---
 app.use(session({
-    secret: 'your-very-secret-key-change-this', // Change this to a random string
+    secret: 'a-very-strong-and-long-secret-key-for-coaches-app',
     resave: false,
     saveUninitialized: true,
-    cookie: { secure: false } // Set to true if you are using HTTPS
+    cookie: { secure: process.env.NODE_ENV === 'production' }
 }));
 
-// Serve static files from the root directory (for index.html)
-app.use(express.static(__dirname));
+app.use(bodyParser.urlencoded({ extended: true }));
+app.use(bodyParser.json());
+app.set('view engine', 'ejs');
+app.set('views', path.join(__dirname, 'views'));
 
-let pool;
-
-async function initializeDatabase() {
-    try {
-        pool = await mysql.createPool(dbConfig);
-        console.log("Successfully connected to the database.");
-    } catch (error) {
-        console.error("Failed to connect to the database:", error);
-        process.exit(1); // Exit if we can't connect
+// --- Middleware for Authentication and Roles ---
+function checkAuth(req, res, next) {
+    if (req.session.loggedin) {
+        res.locals.user = req.session; // Make user session available in all EJS templates
+        next();
+    } else {
+        res.redirect('/');
     }
 }
 
-// --- API ROUTES ---
-
-// Check Session
-app.get('/api/check_session', (req, res) => {
-    if (req.session.loggedin) {
-        res.json({
-            loggedin: true,
-            username: req.session.username,
-            role: req.session.role
-        });
-    } else {
-        res.json({ loggedin: false });
-    }
-});
-
-// Login
-app.post('/api/login', async (req, res) => {
-    const { username, password } = req.body;
-    if (!username || !password) {
-        return res.status(400).json({ success: false, message: 'Username and password are required.' });
-    }
-    
-    try {
-        const [rows] = await pool.query('SELECT * FROM users WHERE username = ?', [username]);
-        if (rows.length > 0) {
-            const user = rows[0];
-            let passwordIsValid = false;
-
-            try {
-                // Primary, secure check
-                passwordIsValid = await bcrypt.compare(password, user.password_hash);
-            } catch (e) {
-                // This will catch errors if the hash is invalid (e.g., the old PHP string)
-                passwordIsValid = false;
-            }
-
-            // If the secure check fails, try the one-time fallback for the admin
-            if (!passwordIsValid && username === 'Omarelhaq' && password === 'omarreda123') {
-                // Password is correct, let's update the hash to be secure
-                const new_hash = await bcrypt.hash(password, 10);
-                await pool.query("UPDATE users SET password_hash = ? WHERE id = ?", [new_hash, user.id]);
-                passwordIsValid = true; // Mark as valid for login
-            }
-
-            if (passwordIsValid) {
-                req.session.loggedin = true;
-                req.session.user_id = user.id;
-                req.session.username = user.username;
-                req.session.role = user.role;
-                res.json({ success: true, role: user.role });
-            } else {
-                res.json({ success: false, message: 'Invalid credentials' });
-            }
-        } else {
-            res.json({ success: false, message: 'Invalid credentials' });
-        }
-    } catch (error) {
-        console.error(error);
-        res.status(500).json({ success: false, message: 'Database error' });
-    }
-});
-
-// Logout
-app.get('/api/logout', (req, res) => {
-    req.session.destroy();
-    res.json({ success: true });
-});
-
-// Middleware to check if user is an admin
-const isAdmin = (req, res, next) => {
-    if (req.session.loggedin && req.session.role === 'admin') {
+function checkAdmin(req, res, next) {
+    if (req.session.role === 'admin') {
         next();
     } else {
-        res.status(403).json({ success: false, message: 'Unauthorized' });
+        res.status(403).send('Access Denied: Admins only.');
     }
-};
+}
 
-// Create User (Admin only)
-app.post('/api/create_user', isAdmin, async (req, res) => {
-    const { username, password } = req.body;
-    if (!username || !password) {
-        return res.status(400).json({ success: false, message: 'Username and password are required.' });
-    }
-    try {
-        const hashedPassword = await bcrypt.hash(password, 10);
-        await pool.query('INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)', [username, hashedPassword, 'coach']);
-        res.json({ success: true });
-    } catch (error) {
-        if (error.code === 'ER_DUP_ENTRY') {
-            res.json({ success: false, message: 'Username already exists.' });
-        } else {
-            res.status(500).json({ success: false, message: 'Database error' });
-        }
-    }
-});
-
-// Get Users (Admin only)
-app.get('/api/get_users', isAdmin, async (req, res) => {
-    try {
-        const [users] = await pool.query("SELECT id, username, role FROM users WHERE role = 'coach'");
-        res.json({ success: true, users });
-    } catch (error) {
-        res.status(500).json({ success: false, message: 'Database error' });
-    }
-});
-
-// Save Report
-app.post('/api/save-report', async (req, res) => {
-    if (!req.session.loggedin) {
-        return res.status(403).json({ success: false, message: 'Unauthorized' });
-    }
-    
-    const data = req.body;
-    const user_id = req.session.user_id;
-    const connection = await pool.getConnection();
-
-    try {
-        await connection.beginTransaction();
-        
-        const [gameResult] = await connection.query(
-            "INSERT INTO games (user_id, home_team_name, home_team_color, away_team_name, away_team_color) VALUES (?, ?, ?, ?, ?)",
-            [user_id, data.teams.home.name, data.teams.home.color, data.teams.away.name, data.teams.away.color]
-        );
-        const game_id = gameResult.insertId;
-
-        for (const teamKey of ['home', 'away']) {
-            if (data.teams[teamKey] && data.teams[teamKey].players) {
-                for (const player_data of data.teams[teamKey].players) {
-                    const [playerResult] = await connection.query(
-                        "INSERT INTO players (game_id, team, player_name, player_number) VALUES (?, ?, ?, ?)",
-                        [game_id, teamKey, player_data.name, player_data.number]
-                    );
-                    const player_id = playerResult.insertId;
-
-                    await connection.query(
-                        "INSERT INTO stats (player_id, minutes, points, rebounds, offensive_rebounds, defensive_rebounds, assists, steals, blocks, times_blocked, turnovers, personal_fouls, coach_notes, fg2a, fg2m, fg3a, fg3m, fta, ftm) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                        [
-                            player_id, player_data.minutes, player_data.points, player_data.rebounds, player_data.offensiveRebounds, player_data.defensiveRebounds,
-                            player_data.assists, player_data.steals, player_data.blocks, player_data.timesBlocked, player_data.turnovers, player_data.personalFouls,
-                            player_data.coachNotes, player_data.fg2a, player_data.fg2m, player_data.fg3a, player_data.fg3m, player_data.fta, player_data.ftm
-                        ]
-                    );
-                }
-            }
-        }
-        
-        await connection.commit();
-        res.json({ success: true, report_url: `/report.php?id=${game_id}` }); // Kept .php for compatibility with your existing file
-    } catch (error) {
-        await connection.rollback();
-        console.error(error);
-        res.status(500).json({ success: false, message: 'Error saving report' });
-    } finally {
-        connection.release();
-    }
-});
-
-// Serve the main page
+// --- Authentication Routes ---
 app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'index.html'));
+    res.render('login', { error: null });
 });
 
-// Start the server
-initializeDatabase().then(() => {
-    app.listen(port, () => {
-        console.log(`Server running on port ${port}`);
+app.post('/login', (req, res) => {
+    const { username, password } = req.body;
+    if (username && password) {
+        db.query('SELECT * FROM users WHERE username = ? AND password = ?', [username, password], (err, results) => {
+            if (err || results.length === 0) {
+                res.render('login', { error: 'Incorrect Username and/or Password!' });
+            } else {
+                req.session.loggedin = true;
+                req.session.username = results[0].username;
+                req.session.userId = results[0].id;
+                req.session.role = results[0].role;
+                res.redirect('/dashboard');
+            }
+        });
+    } else {
+        res.render('login', { error: 'Please enter Username and Password!' });
+    }
+});
+
+app.get('/logout', (req, res) => {
+    req.session.destroy(() => res.redirect('/'));
+});
+
+
+// --- Main Dashboard Route (handles both roles) ---
+app.get('/dashboard', checkAuth, (req, res) => {
+    res.render('dashboard'); // A single dashboard that shows different content based on role
+});
+
+
+// --- ADMIN-SPECIFIC ROUTES ---
+
+// Route to load the admin panel content
+app.get('/admin/panel', checkAuth, checkAdmin, (req, res) => {
+    db.query('SELECT teams.id, teams.name, users.username as coach_name FROM teams LEFT JOIN users ON teams.coach_id = users.id', (err, teams) => {
+        if (err) return res.status(500).send('Error fetching teams');
+        db.query('SELECT players.id, players.name, players.number, teams.name as team_name FROM players JOIN teams ON players.team_id = teams.id', (err, players) => {
+            if (err) return res.status(500).send('Error fetching players');
+            db.query('SELECT id, username FROM users WHERE role = "coach"', (err, coaches) => {
+                if (err) return res.status(500).send('Error fetching coaches');
+                res.render('partials/admin-panel', { teams, players, coaches });
+            });
+        });
     });
 });
+
+app.post('/admin/teams', checkAuth, checkAdmin, (req, res) => {
+    const { name, coach_id } = req.body;
+    const coachId = coach_id === 'null' ? null : coach_id;
+    db.query('INSERT INTO teams (name, coach_id) VALUES (?, ?)', [name, coachId], (err) => {
+        if (err) return res.status(500).send('Error adding team');
+        res.redirect('/dashboard');
+    });
+});
+
+app.post('/admin/players', checkAuth, checkAdmin, (req, res) => {
+    const { name, number, team_id } = req.body;
+    db.query('INSERT INTO players (name, number, team_id) VALUES (?, ?, ?)', [name, number, team_id], (err) => {
+        if (err) return res.status(500).send('Error adding player');
+        res.redirect('/dashboard');
+    });
+});
+
+
+// --- COACH-SPECIFIC ROUTES ---
+
+// Route to load the coach's scouting panel
+app.get('/coach/scouting-panel', checkAuth, (req, res) => {
+    // A coach can be assigned to multiple teams. Fetch all teams for the current coach.
+    const coachId = req.session.userId;
+    db.query('SELECT * FROM teams WHERE coach_id = ?', [coachId], (err, teams) => {
+        if (err) return res.status(500).send('Error fetching teams for coach');
+        
+        // If no teams, render the panel without players.
+        if (teams.length === 0) {
+            return res.render('partials/scouting-panel', { teams: [], players: [] });
+        }
+        
+        // Fetch players for the first team by default, or based on a query param.
+        const teamIdToFetch = req.query.team_id || teams[0].id;
+        db.query('SELECT * FROM players WHERE team_id = ?', [teamIdToFetch], (err, players) => {
+            if (err) return res.status(500).send('Error fetching players');
+            res.render('partials/scouting-panel', { teams, players, selectedTeamId: teamIdToFetch });
+        });
+    });
+});
+
+
+// Route to load the coach's reports
+app.get('/coach/reports', checkAuth, (req, res) => {
+    db.query('SELECT id, title, created_at FROM reports WHERE coach_username = ? ORDER BY created_at DESC', [req.session.username], (err, reports) => {
+        if (err) return res.status(500).send("Database query error");
+        res.render('partials/reports', { reports });
+    });
+});
+
+// Generate and save a report
+app.post('/coach/generate-report', checkAuth, (req, res) => {
+    const { reportData, teamName, playerId } = req.body;
+    if (!playerId) {
+        return res.status(400).json({ success: false, message: 'Player ID is required.' });
+    }
+
+    const reportContent = generateDetailedReportText(reportData); // reportData is now for a single player
+    const playerName = reportData.length > 0 ? reportData[0].name : 'Player';
+    const reportTitle = `Scouting Report: ${playerName} (${teamName}) - ${new Date().toLocaleDateString()}`;
+
+    const newReport = {
+        coach_username: req.session.username,
+        player_id: playerId,
+        team_name_snapshot: teamName,
+        title: reportTitle,
+        content: reportContent
+    };
+
+    db.query('INSERT INTO reports SET ?', newReport, (err, result) => {
+        if (err) {
+            console.error(err);
+            return res.status(500).json({ success: false, message: 'Failed to save report.' });
+        }
+        res.json({ success: true, reportId: result.insertId });
+    });
+});
+
+// View a specific report
+app.get('/report/:id', checkAuth, (req, res) => {
+    const reportId = req.params.id;
+    // A coach can only see their own reports. An admin could see all, but we'll keep it simple for now.
+    db.query('SELECT * FROM reports WHERE id = ? AND coach_username = ?', [reportId, req.session.username], (err, results) => {
+        if (err || results.length === 0) {
+            return res.status(404).send('Report not found or access denied.');
+        }
+        res.render('report-view', { report: results[0] });
+    });
+});
+
+
+// --- Helper Function for Report Generation ---
+function generateDetailedReportText(players) { // Now expects an array with a single player object
+    let report = "";
+    if (!players || players.length === 0) {
+        return "No player data provided.";
+    }
+    const p = players[0]; // Process the single player from the array
+
+    const formatTime = (seconds) => {
+        const m = Math.floor(seconds / 60).toString().padStart(2, '0');
+        const s = (seconds % 60).toString().padStart(2, '0');
+        return `${m}:${s}`;
+    };
+
+    const fg2_pct = p.fg2a > 0 ? ((p.fg2m / p.fg2a) * 100).toFixed(1) : '0.0';
+    const fg3_pct = p.fg3a > 0 ? ((p.fg3m / p.fg3a) * 100).toFixed(1) : '0.0';
+    const ft_pct = p.fta > 0 ? ((p.ftm / p.fta) * 100).toFixed(1) : '0.0';
+
+    report += `PLAYER: ${p.name} (#${p.number})\n`;
+    report += `----------------------------------------\n`;
+    report += `MIN: ${formatTime(p.minutes)} | PTS: ${p.points} | REB: ${p.rebounds} (${p.offensiveRebounds} O, ${p.defensiveRebounds} D) | AST: ${p.assists}\n`;
+    report += `STL: ${p.steals} | BLK: ${p.blocks} | SHOT BLOCKED: ${p.timesBlocked} | TO: ${p.turnovers} | PF: ${p.personalFouls}\n`;
+
+    if (p.turnovers > 0) {
+        const to_details = Object.entries(p.turnoverDetails).filter(([, val]) => val > 0).map(([key, val]) => `${key}(${val})`).join(', ');
+        report += `  - TO Details: ${to_details}\n`;
+    }
+    if (p.personalFouls > 0) {
+        const f_details = Object.entries(p.foulDetails).filter(([, val]) => val > 0).map(([key, val]) => `${key}(${val})`).join(', ');
+        report += `  - Foul Details: ${f_details}\n`;
+    }
+    report += `SHOOTING:\n`;
+    report += `  - 2PT: ${p.fg2m}-${p.fg2a} (${fg2_pct}%)\n`;
+    report += `  - 3PT: ${p.fg3m}-${p.fg3a} (${fg3_pct}%)\n`;
+    report += `  - FT:  ${p.ftm}-${p.fta} (${ft_pct}%)\n`;
+    if (p.shots && p.shots.length > 0) {
+        report += `SHOT ANALYSIS:\n`;
+        const shotLocations = {};
+        p.shots.forEach(shot => {
+            let key = `${shot.location} (${shot.type})`;
+            if (shot.subLocation) key += ` - ${shot.subLocation}`;
+            if (!shotLocations[key]) shotLocations[key] = { m: 0, a: 0 };
+            shotLocations[key].a++;
+            if (shot.made) shotLocations[key].m++;
+        });
+        for (const [loc, stats] of Object.entries(shotLocations)) {
+            report += `  - ${loc}: ${stats.m}/${stats.a}\n`;
+        }
+    }
+    if (p.coachNotes && p.coachNotes.trim()) {
+        report += `COACH NOTES:\n${p.coachNotes.trim()}\n`;
+    }
+    return report;
+}
+
+module.exports = app;
