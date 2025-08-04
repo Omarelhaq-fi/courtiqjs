@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .sidebar-link.active { background-color: #f97316; color: white; }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-200">
+    <div class="flex h-screen">
+        <!-- Sidebar -->
+        <div class="w-64 bg-gray-800 p-5 flex flex-col">
+            <div>
+                <h1 class="text-2xl font-bold text-orange-500">CourtIQ</h1>
+                <p class="text-sm text-gray-400 mb-8">Logged in as: <%= user.username %> (<%= user.role %>)</p>
+            </div>
+            <nav>
+                <% if (user.role === 'admin') { %>
+                    <a href="#" id="nav-admin-panel" class="sidebar-link block py-2.5 px-4 rounded transition duration-200 hover:bg-orange-500" onclick="loadContent('/admin/panel', this)">Admin Panel</a>
+                <% } else { %>
+                    <a href="#" id="nav-scouting-panel" class="sidebar-link block py-2.5 px-4 rounded transition duration-200 hover:bg-orange-500" onclick="loadContent('/coach/scouting-panel', this)">Scouting Panel</a>
+                    <a href="#" id="nav-reports" class="sidebar-link block py-2.5 px-4 rounded transition duration-200 hover:bg-orange-500" onclick="loadContent('/coach/reports', this)">My Reports</a>
+                <% } %>
+            </nav>
+            <a href="/logout" class="block py-2.5 px-4 rounded transition duration-200 hover:bg-red-500 mt-auto text-center">Logout</a>
+        </div>
+        <!-- Main Content -->
+        <div id="main-content-area" class="flex-1 p-4 md:p-10 overflow-y-auto">
+            <!-- Content will be loaded here -->
+        </div>
+    </div>
+
+    <script>
+        function loadContent(url, navElement) {
+            document.querySelectorAll('.sidebar-link').forEach(link => link.classList.remove('active'));
+            if (navElement) navElement.classList.add('active');
+
+            fetch(url)
+                .then(response => response.ok ? response.text() : Promise.reject('Network response was not ok.'))
+                .then(html => {
+                    document.getElementById('main-content-area').innerHTML = html;
+                    const scriptElement = document.getElementById('scouting-panel-script');
+                    if (scriptElement) {
+                        const script = document.createElement('script');
+                        script.innerHTML = scriptElement.innerHTML;
+                        const oldScript = document.getElementById('dynamic-scouting-script');
+                        if(oldScript) oldScript.remove();
+                        script.id = 'dynamic-scouting-script';
+                        document.body.appendChild(script);
+                    }
+                })
+                .catch(err => {
+                    console.error('Failed to load content:', err);
+                    document.getElementById('main-content-area').innerHTML = `<div class="text-red-400">Error loading content. Please try again.</div>`;
+                });
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const initialUrl = '<%= user.role === "admin" ? "/admin/panel" : "/coach/scouting-panel" %>';
+            const initialNavId = '<%= user.role === "admin" ? "nav-admin-panel" : "nav-scouting-panel" %>';
+            loadContent(initialUrl, document.getElementById(initialNavId));
+        });
+    </script>
+</body>
+</html>
