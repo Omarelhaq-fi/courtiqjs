@@ -1,0 +1,52 @@
+<h1 class="text-3xl font-bold mb-6 text-orange-400">Admin Panel</h1>
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+    <!-- Add Team -->
+    <div class="bg-gray-800 p-6 rounded-lg">
+        <h2 class="text-xl font-semibold mb-4">Add New Team</h2>
+        <form action="/admin/teams" method="POST">
+            <div class="mb-4">
+                <label for="name" class="block text-sm font-medium text-gray-300 mb-1">Team Name</label>
+                <input type="text" name="name" id="name" required class="w-full bg-gray-700 border-gray-600 rounded-md p-2 focus:ring-orange-500">
+            </div>
+            <div class="mb-4">
+                <label for="coach_id" class="block text-sm font-medium text-gray-300 mb-1">Assign Coach</label>
+                <select name="coach_id" id="coach_id" class="w-full bg-gray-700 border-gray-600 rounded-md p-2 focus:ring-orange-500">
+                    <option value="null">-- No Coach --</option>
+                    <% coaches.forEach(coach => { %>
+                        <option value="<%= coach.id %>"><%= coach.username %></option>
+                    <% }) %>
+                </select>
+            </div>
+            <button type="submit" class="w-full bg-orange-600 hover:bg-orange-700 text-white font-bold py-2 px-4 rounded">Add Team</button>
+        </form>
+    </div>
+
+    <!-- Add Player -->
+    <div class="bg-gray-800 p-6 rounded-lg">
+        <h2 class="text-xl font-semibold mb-4">Add New Player</h2>
+        <form action="/admin/players" method="POST">
+             <div class="mb-4">
+                <label for="name" class="block text-sm font-medium text-gray-300 mb-1">Player Name</label>
+                <input type="text" name="name" id="name" required class="w-full bg-gray-700 border-gray-600 rounded-md p-2 focus:ring-orange-500">
+            </div>
+            <div class="mb-4">
+                <label for="number" class="block text-sm font-medium text-gray-300 mb-1">Player Number</label>
+                <input type="text" name="number" id="number" required class="w-full bg-gray-700 border-gray-600 rounded-md p-2 focus:ring-orange-500">
+            </div>
+            <div class="mb-4">
+                <label for="team_id" class="block text-sm font-medium text-gray-300 mb-1">Assign to Team</label>
+                <select name="team_id" id="team_id" required class="w-full bg-gray-700 border-gray-600 rounded-md p-2 focus:ring-orange-500">
+                    <% teams.forEach(team => { %>
+                        <option value="<%= team.id %>"><%= team.name %></option>
+                    <% }) %>
+                </select>
+            </div>
+            <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">Add Player</button>
+        </form>
+    </div>
+</div>
+
+<div class="mt-8">
+    <h2 class="text-2xl font-semibold mb-4">Existing Teams & Players</h2>
+    <!-- Display Teams and Players -->
+</div>
