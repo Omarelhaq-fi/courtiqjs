@@ -1,0 +1,971 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CourtIQ - Basketball Scouting</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #111827; color: #e2e8f0; overflow-x: hidden; }
+        .card { background-color: rgba(45, 55, 72, 0.85); border: 1px solid rgba(74, 85, 104, 0.8); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+        .team-selector-btn { transition: all 0.2s ease-in-out; border: 2px solid transparent; }
+        .team-selector-btn.active { border-color: var(--team-color, #f97316); box-shadow: 0 0 15px 0px var(--team-color, #f97316); }
+        .btn-stat { transition: all 0.2s ease-in-out; }
+        .btn-stat:hover { transform: scale(1.05); box-shadow: 0 0 10px rgba(239, 108, 0, 0.5); }
+        .timer-btn.active, .record-btn.active { background-color: #c53030; color: white; }
+        .modal-backdrop { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.7); backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px); display: flex; justify-content: center; align-items: center; z-index: 50; }
+        .modal-content { background-color: rgba(45, 55, 72, 0.95); padding: 2rem; border-radius: 0.5rem; width: 90%; max-width: 400px; border: 1px solid rgba(74, 85, 104, 0.8); }
+        .detail-btn { background-color: #4a5568; }
+        .detail-btn:hover { background-color: #718096; }
+        .player-checkbox:disabled + label { cursor: not-allowed; opacity: 0.5; }
+        #court-background { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 100%; height: 100%; z-index: -1; opacity: 0.15; overflow: hidden; }
+        .court-line { position: absolute; border-style: solid; border-color: #f97316; box-shadow: 0 0 8px #f97316, 0 0 16px #f97316; }
+        .center-circle { width: 20vh; height: 20vh; top: 50%; left: 50%; transform: translate(-50%, -50%); border-width: 4px; border-radius: 50%; }
+        .three-point-line { width: 120vh; height: 120vh; bottom: -50vh; left: 50%; transform: translateX(-50%); border-width: 4px; border-bottom: none; border-radius: 50%; }
+        .top-key { width: 30vh; height: 35vh; top: 0; left: 50%; transform: translateX(-50%); border-width: 4px; border-top: none; }
+        .nav-link { transition: all 0.2s ease-in-out; }
+        .nav-link.active { background-color: #f97316; color: white; }
+    </style>
+</head>
+<body class="p-0 m-0">
+
+    <!-- Login Screen -->
+    <div id="login-screen" class="min-h-screen flex items-center justify-center bg-gray-900">
+        <div class="card p-8 rounded-lg shadow-2xl w-full max-w-sm">
+            <h2 class="text-3xl font-bold text-center text-orange-500 mb-6">CourtIQ Login</h2>
+            <div id="login-error" class="text-red-400 text-center mb-4 hidden"></div>
+            <div class="space-y-4">
+                <input id="username" type="text" placeholder="Username" class="w-full bg-slate-700 border border-slate-600 rounded-md p-3 focus:outline-none focus:ring-2 focus:ring-orange-500">
+                <input id="password" type="password" placeholder="Password" class="w-full bg-slate-700 border border-slate-600 rounded-md p-3 focus:outline-none focus:ring-2 focus:ring-orange-500">
+                <button id="loginBtn" class="w-full bg-orange-600 hover:bg-orange-700 text-white font-bold py-3 px-6 rounded-md transition duration-300">Login</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Dashboard -->
+    <div id="dashboard" class="hidden flex h-screen">
+        <!-- Sidebar -->
+        <aside class="w-64 bg-gray-900 text-white flex flex-col p-4">
+            <h1 class="text-3xl font-bold text-center mb-8">Court<span class="text-orange-500">IQ</span></h1>
+            <nav id="main-nav" class="flex flex-col space-y-2 flex-grow">
+                <a href="#" class="nav-link active text-lg font-semibold p-3 rounded-md hover:bg-gray-700" data-tab="dashboard-content">Dashboard</a>
+                <a href="#" id="players-link" class="nav-link hidden text-lg font-semibold p-3 rounded-md hover:bg-gray-700" data-tab="players-content">Players</a>
+                <a href="#" class="nav-link text-lg font-semibold p-3 rounded-md hover:bg-gray-700" data-tab="scouting-content">Scouting</a>
+                <a href="#" class="nav-link text-lg font-semibold p-3 rounded-md hover:bg-gray-700" data-tab="reports-content">Reports</a>
+                <a href="#" id="admin-link" class="nav-link hidden text-lg font-semibold p-3 rounded-md hover:bg-gray-700" data-tab="admin-content">Admin</a>
+            </nav>
+            <div class="mt-auto">
+                <button id="logoutBtn" class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-6 rounded-md">Logout</button>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="flex-1 p-8 overflow-y-auto">
+            <div id="dashboard-content" class="tab-content">
+                <h2 class="text-3xl font-bold mb-4">Dashboard</h2>
+                <p>Welcome to your CourtIQ dashboard. Analytics and summaries will be shown here.</p>
+            </div>
+            <div id="players-content" class="tab-content hidden">
+                <h2 class="text-3xl font-bold mb-4">Manage Teams & Rosters</h2>
+                 <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div class="card p-6 rounded-lg">
+                        <h3 class="text-xl font-semibold mb-4">Create New Team</h3>
+                        <input id="newTeamName" type="text" placeholder="Team Name" class="w-full bg-slate-700 border border-slate-600 rounded-md p-3 mb-4">
+                        <button id="createTeamBtn" class="w-full bg-orange-600 hover:bg-orange-700 text-white font-bold py-3 px-6 rounded-md">Create Team</button>
+                         <h3 class="text-xl font-semibold my-4">Your Teams</h3>
+                        <div id="teams-list" class="space-y-2"></div>
+                    </div>
+                    <div class="card p-6 rounded-lg">
+                        <h3 class="text-xl font-semibold mb-4">Add Players to Team</h3>
+                         <select id="team-select-roster" class="w-full bg-slate-700 border border-slate-600 rounded-md p-3 mb-4"></select>
+                         <div class="space-y-4">
+                            <input id="newRosterPlayerName" type="text" placeholder="Player Name" class="w-full bg-slate-700 border border-slate-600 rounded-md p-3">
+                            <input id="newRosterPlayerNumber" type="text" placeholder="Player #" class="w-full bg-slate-700 border border-slate-600 rounded-md p-3">
+                            <button id="addRosterPlayerBtn" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-md">Add Player to Selected Team</button>
+                         </div>
+                         <h3 class="text-xl font-semibold my-4">Player Roster</h3>
+                         <div id="roster-list" class="space-y-2"></div>
+                    </div>
+                </div>
+            </div>
+            <div id="scouting-content" class="tab-content hidden">
+                <!-- Scouting App Injected Here -->
+            </div>
+            <div id="reports-content" class="tab-content hidden">
+                 <h2 class="text-3xl font-bold mb-4">Game Reports</h2>
+                <div id="reports-list" class="space-y-4"></div>
+            </div>
+            <div id="admin-content" class="tab-content hidden">
+                 <h2 class="text-3xl font-bold mb-4">Admin Panel</h2>
+                 <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div class="card p-6 rounded-lg">
+                        <h3 class="text-xl font-semibold mb-4">Manage Coach Accounts</h3>
+                        <div id="create-user-error" class="text-red-400 mb-4 hidden"></div>
+                        <div id="create-user-success" class="text-green-400 mb-4 hidden"></div>
+                        <div class="space-y-4">
+                            <input id="newUsername" type="text" placeholder="New Coach Username" class="w-full bg-slate-700 border border-slate-600 rounded-md p-3">
+                            <input id="newPassword" type="password" placeholder="New Coach Password" class="w-full bg-slate-700 border border-slate-600 rounded-md p-3">
+                            <button id="createUserBtn" class="w-full bg-orange-600 hover:bg-orange-700 text-white font-bold py-3 px-6 rounded-md">Create Account</button>
+                        </div>
+                        <h3 class="text-xl font-semibold my-4">Coach Accounts</h3>
+                        <div id="user-list" class="space-y-2"></div>
+                    </div>
+                 </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Scouting App Template -->
+    <template id="scouting-app-template">
+        <div id="court-background">
+            <div class="court-line center-circle"></div>
+            <div class="court-line three-point-line"></div>
+            <div class="court-line top-key"></div>
+        </div>
+        <div id="app-container" class="mx-auto relative z-10">
+            <header class="text-center mb-8">
+                <h1 class="text-4xl font-bold text-orange-500">Live Game Scouting</h1>
+            </header>
+            <div class="grid grid-cols-3 gap-4 mb-8">
+                <div id="homeTeamScoreboard" class="card p-4 rounded-lg text-center">
+                    <h3 id="homeTeamNameDisplay" class="text-lg font-semibold text-orange-400">Home</h3>
+                    <p id="homeTeamScore" class="text-6xl font-bold">0</p>
+                </div>
+                <div class="card p-4 rounded-lg text-center flex flex-col justify-center">
+                    <p id="gameTimerDisplay" class="text-5xl font-mono font-bold">00:00</p>
+                </div>
+                <div id="awayTeamScoreboard" class="card p-4 rounded-lg text-center">
+                    <h3 id="awayTeamNameDisplay" class="text-lg font-semibold text-slate-400">Away</h3>
+                    <p id="awayTeamScore" class="text-6xl font-bold">0</p>
+                </div>
+            </div>
+            <div class="card p-6 rounded-lg shadow-lg mb-8">
+                <h2 class="text-2xl font-semibold mb-4 border-b border-slate-600 pb-2">Setup & Controls</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-4">
+                    <div>
+                        <h3 class="font-semibold mb-2">Home Team Name</h3>
+                        <input id="homeTeamName" type="text" placeholder="Home Team Name" class="w-full bg-slate-700 border border-slate-600 rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-orange-500">
+                    </div>
+                    <div>
+                        <h3 class="font-semibold mb-2">Away Team Name</h3>
+                        <input id="awayTeamName" type="text" placeholder="Away Team Name" class="w-full bg-slate-700 border border-slate-600 rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+                </div>
+                <div class="border-t border-slate-600 pt-4">
+                    <h3 class="font-semibold mb-2">Add New Player</h3>
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <input id="playerName" type="text" placeholder="Player Name" class="sm:col-span-2 w-full bg-slate-700 border border-slate-600 rounded-md p-3">
+                        <input id="playerNumber" type="text" placeholder="Player #" class="w-full bg-slate-700 border border-slate-600 rounded-md p-3">
+                    </div>
+                    <div class="flex gap-4 mt-4">
+                        <button id="addHomePlayerBtn" class="w-full bg-orange-600 hover:bg-orange-700 text-white font-bold py-3 px-6 rounded-md">Add to Home</button>
+                        <button id="addAwayPlayerBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-md">Add to Away</button>
+                    </div>
+                </div>
+                <div id="startingLineupContainer" class="mt-4 border-t border-slate-600 pt-4">
+                    <h3 class="font-semibold mb-2">Select Starting Lineups</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <h4 class="font-medium mb-2 text-orange-400">Home Starters</h4>
+                            <div id="homeStarterList" class="bg-slate-800 p-2 rounded-lg min-h-[40px] flex flex-wrap gap-x-4 gap-y-2"></div>
+                        </div>
+                        <div>
+                            <h4 class="font-medium mb-2 text-blue-400">Away Starters</h4>
+                            <div id="awayStarterList" class="bg-slate-800 p-2 rounded-lg min-h-[40px] flex flex-wrap gap-x-4 gap-y-2"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="border-t border-slate-600 mt-6 pt-4">
+                    <h3 class="font-semibold mb-2 text-center">In-Game Controls</h3>
+                    <div class="flex justify-center mb-4">
+                        <button id="gameTimerBtn" class="w-full max-w-xs bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-md">Start Game</button>
+                    </div>
+                    <div id="substitutionContainer" class="hidden grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                        <div>
+                            <h4 class="font-medium text-center mb-2">Sub Out (In Game)</h4>
+                            <div id="subOutList" class="bg-slate-800 p-2 rounded-lg max-h-32 overflow-y-auto space-y-1"></div>
+                        </div>
+                        <div>
+                            <h4 class="font-medium text-center mb-2">Sub In (On Bench)</h4>
+                            <div id="subInList" class="bg-slate-800 p-2 rounded-lg max-h-32 overflow-y-auto space-y-1"></div>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4 max-w-md mx-auto">
+                        <button id="subAndResumeBtn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-md">Substitute & Resume</button>
+                        <button id="stopAllBtn" class="bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-4 rounded-md">Stop All Timers</button>
+                    </div>
+                </div>
+            </div>
+            <div class="flex justify-around items-center mb-4 card p-2 rounded-lg">
+                <button id="selectHomeTeamBtn" class="team-selector-btn flex-1 p-2 rounded-md flex justify-center items-center gap-4">
+                    <h3 class="font-semibold text-lg">Home</h3>
+                    <input id="homeTeamColor" type="color" value="#f97316" class="p-1 h-10 w-10 rounded-md bg-slate-700">
+                </button>
+                <button id="selectAwayTeamBtn" class="team-selector-btn flex-1 p-2 rounded-md flex justify-center items-center gap-4">
+                    <h3 class="font-semibold text-lg">Away</h3>
+                    <input id="awayTeamColor" type="color" value="#3b82f6" class="p-1 h-10 w-10 rounded-md bg-slate-700">
+                </button>
+            </div>
+            <div id="scoutingPanel" class="flex flex-wrap gap-4 justify-center"></div>
+            <div class="mt-8 text-center">
+                <button id="generateReportBtn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-8 rounded-md">Save Game & Generate Report</button>
+            </div>
+        </div>
+    </template>
+    
+    <div id="detailModal" class="modal-backdrop hidden"></div>
+    <div id="reportModal" class="modal-backdrop hidden"></div>
+    <div id="editUserModal" class="modal-backdrop hidden"></div>
+
+    <script>
+        const app = {
+            teams: {
+                home: { name: 'Home', color: '#f97316', players: [], lastPlaying: [] },
+                away: { name: 'Away', color: '#3b82f6', players: [], lastPlaying: [] }
+            },
+            activeTeam: 'home',
+            gameTime: 0,
+            gameTimerInterval: null,
+            isGameTimerRunning: false,
+            recognition: null, 
+            isRecordingPlayerId: null,
+            selectedPlayerId: null,
+            numberInputBuffer: '',
+            numberInputTimeout: null,
+            shotSequenceBuffer: '',
+            foulTimeout: null,
+
+            init(container) {
+                this.container = container;
+                this.initDOMElements();
+                this.addEventListeners();
+                this.render();
+            },
+
+            initDOMElements() {
+                const ids = ['playerName', 'playerNumber', 'scoutingPanel', 'generateReportBtn', 'detailModal', 'modalTitle', 'modalBody', 'cancelDetailBtn', 'reportModal', 'reportOutput', 'copyReportBtn', 'closeReportBtn', 'subAndResumeBtn', 'stopAllBtn', 'gameTimerBtn', 'substitutionContainer', 'subOutList', 'subInList', 'homeStarterList', 'awayStarterList', 'selectHomeTeamBtn', 'selectAwayTeamBtn', 'homeTeamName', 'awayTeamName', 'homeTeamColor', 'awayTeamColor', 'homeTeamScoreboard', 'awayTeamScoreboard'];
+                const scope = this.container || document;
+                ids.forEach(id => {
+                    this[id.replace(/Btn$/, 'Button')] = scope.querySelector(`#${id}`);
+                });
+            },
+            
+            addEventListeners() {
+                this.container.querySelector('#addHomePlayerBtn').addEventListener('click', () => this.addPlayer('home'));
+                this.container.querySelector('#addAwayPlayerBtn').addEventListener('click', () => this.addPlayer('away'));
+                this.generateReportButton.addEventListener('click', () => this.generateReport());
+                document.getElementById('cancelDetailBtn').addEventListener('click', () => this.closeDetailModal());
+                document.getElementById('closeReportBtn').addEventListener('click', () => document.getElementById('reportModal').classList.add('hidden'));
+                this.subAndResumeButton.addEventListener('click', () => this.handleSubstitutionAndResume());
+                this.stopAllButton.addEventListener('click', () => this.stopAllTimers());
+                this.gameTimerButton.addEventListener('click', () => this.handleGameTimer());
+                this.selectHomeTeamButton.addEventListener('click', () => this.setActiveTeam('home'));
+                this.selectAwayTeamButton.addEventListener('click', () => this.setActiveTeam('away'));
+                this.homeTeamName.addEventListener('input', (e) => this.updateTeamData('home', 'name', e.target.value));
+                this.awayTeamName.addEventListener('input', (e) => this.updateTeamData('away', 'name', e.target.value));
+                this.homeTeamColor.addEventListener('input', (e) => this.updateTeamData('home', 'color', e.target.value));
+                this.awayTeamColor.addEventListener('input', (e) => this.updateTeamData('away', 'color', e.target.value));
+                this.homeTeamScoreboard.addEventListener('click', () => this.setActiveTeam('home'));
+                this.awayTeamScoreboard.addEventListener('click', () => this.setActiveTeam('away'));
+                document.addEventListener('keydown', (e) => this.handleKeyPress(e));
+            },
+
+            addPlayer(teamKey) {
+                const name = this.playerName.value.trim();
+                const number = this.playerNumber.value.trim();
+                if (!name || !number) {
+                    console.warn('Player Name and Number are required.');
+                    return;
+                }
+                const player = {
+                    id: Date.now(), name, number, minutes: 0, timerInterval: null, isTimerRunning: false, points: 0,
+                    rebounds: 0, offensiveRebounds: 0, defensiveRebounds: 0, assists: 0, steals: 0, blocks: 0,
+                    timesBlocked: 0, turnovers: 0, 
+                    turnoverDetails: { missPass: 0, stolen: 0, byBlock: 0, shotClock: 0, travelling: 0, doubleDribble: 0, outOfBounds: 0, backcourt: 0 },
+                    personalFouls: 0,
+                    foulDetails: { defensive: 0, offensive: 0, technical: 0, unsportsmanlike: 0 },
+                    coachNotes: '', fg2a: 0, fg2m: 0, fg3a: 0, fg3m: 0, fta: 0, ftm: 0, shots: [],
+                };
+                this.teams[teamKey].players.push(player);
+                this.render();
+                this.playerName.value = '';
+                this.playerNumber.value = '';
+                this.playerName.focus();
+            },
+
+            handleGameTimer() {
+                if (this.gameTime === 0 && !this.isGameTimerRunning) {
+                    const homeStarters = this.container.querySelectorAll('#homeStarterList input:checked');
+                    const awayStarters = this.container.querySelectorAll('#awayStarterList input:checked');
+                    homeStarters.forEach(checkbox => this.handleTimer(parseInt(checkbox.dataset.playerId, 10)));
+                    awayStarters.forEach(checkbox => this.handleTimer(parseInt(checkbox.dataset.playerId, 10)));
+                }
+                this.isGameTimerRunning = !this.isGameTimerRunning;
+                if (this.isGameTimerRunning) {
+                    this.gameTimerInterval = setInterval(() => { this.gameTime++; this.render(); }, 1000);
+                } else {
+                    clearInterval(this.gameTimerInterval);
+                }
+                this.render();
+            },
+
+            handleTimer(playerId) {
+                const allPlayers = [...this.teams.home.players, ...this.teams.away.players];
+                const player = allPlayers.find(p => p.id === playerId);
+                if (!player) return;
+                player.isTimerRunning = !player.isTimerRunning;
+                if (player.isTimerRunning) {
+                    player.timerInterval = setInterval(() => { player.minutes++; this.render(); }, 1000);
+                } else {
+                    clearInterval(player.timerInterval);
+                }
+                this.render();
+            },
+            
+            stopAllTimers() {
+                this.isGameTimerRunning = false;
+                clearInterval(this.gameTimerInterval);
+                ['home', 'away'].forEach(teamKey => {
+                    const team = this.teams[teamKey];
+                    team.lastPlaying = team.players.filter(p => p.isTimerRunning).map(p => p.id);
+                    team.players.forEach(p => {
+                        if (p.isTimerRunning) {
+                            clearInterval(p.timerInterval);
+                            p.isTimerRunning = false;
+                        }
+                    });
+                });
+                this.render();
+            },
+
+            handleSubstitutionAndResume() {
+                const subOutId = this.container.querySelector('input[name="sub-out"]:checked')?.value;
+                const subInId = this.container.querySelector('input[name="sub-in"]:checked')?.value;
+                const team = this.teams[this.activeTeam];
+                if (subOutId && subInId) {
+                    const subOutIndex = team.lastPlaying.indexOf(parseInt(subOutId, 10));
+                    if (subOutIndex > -1) {
+                        team.lastPlaying.splice(subOutIndex, 1);
+                    }
+                    team.lastPlaying.push(parseInt(subInId, 10));
+                }
+                ['home', 'away'].forEach(teamKey => {
+                    this.teams[teamKey].lastPlaying.forEach(playerId => {
+                        const player = this.teams[teamKey].players.find(p => p.id === playerId);
+                        if (player && !player.isTimerRunning) {
+                            this.handleTimer(playerId);
+                        }
+                    });
+                });
+                if (!this.isGameTimerRunning && this.gameTime > 0) {
+                   this.handleGameTimer();
+                }
+            },
+
+            incrementStat(playerId, stat) {
+                const allPlayers = [...this.teams.home.players, ...this.teams.away.players];
+                const player = allPlayers.find(p => p.id === playerId);
+                if (!player) return;
+                player[stat]++;
+                this.render();
+            },
+            
+            updateTeamData(teamKey, property, value) {
+                this.teams[teamKey][property] = value;
+                this.render();
+            },
+            
+            setActiveTeam(teamKey) {
+                this.activeTeam = teamKey;
+                this.selectedPlayerId = null;
+                this.render();
+            },
+
+            openDetailModal(title, options, callback) {
+                document.getElementById('modalTitle').textContent = title;
+                document.getElementById('modalBody').innerHTML = options.map(opt => `<button class="detail-btn w-full text-white font-bold py-3 px-4 rounded-md" data-detail="${opt.value}">${opt.label}</button>`).join('');
+                document.getElementById('modalBody').querySelectorAll('.detail-btn').forEach(btn => {
+                    btn.addEventListener('click', (e) => { callback(e.target.dataset.detail); });
+                });
+                document.getElementById('detailModal').classList.remove('hidden');
+            },
+            
+            closeDetailModal() { document.getElementById('detailModal').classList.add('hidden'); },
+
+            handleReboundClick(playerId) {
+                const options = [{ label: 'Offensive Rebound', value: 'offensiveRebounds' }, { label: 'Defensive Rebound', value: 'defensiveRebounds' }];
+                this.openDetailModal('Select Rebound Type', options, (detail) => {
+                    const allPlayers = [...this.teams.home.players, ...this.teams.away.players];
+                    const player = allPlayers.find(p => p.id === playerId);
+                    if (player) { player[detail]++; player.rebounds++; this.render(); }
+                    this.closeDetailModal();
+                });
+            },
+
+            handleTurnoverClick(playerId) {
+                const options = [
+                    { label: 'Missed Pass', value: 'missPass' }, { label: 'Stolen', value: 'stolen' },
+                    { label: 'By Block', value: 'byBlock' }, { label: 'Shot Clock (24s)', value: 'shotClock' },
+                    { label: 'Travelling', value: 'travelling' }, { label: 'Double Dribble', value: 'doubleDribble' },
+                    { label: 'Out of Bounds', value: 'outOfBounds' }, { label: 'Backcourt', value: 'backcourt' }
+                ];
+                this.openDetailModal('Select Turnover Type', options, (detail) => {
+                    const allPlayers = [...this.teams.home.players, ...this.teams.away.players];
+                    const player = allPlayers.find(p => p.id === playerId);
+                    if (player) { player.turnoverDetails[detail]++; player.turnovers++; this.render(); }
+                    this.closeDetailModal();
+                });
+            },
+
+            handleFoulClick(playerId) {
+                const options = [
+                    { label: 'Defensive Foul', value: 'defensive' }, { label: 'Offensive Foul', value: 'offensive' },
+                    { label: 'Technical Foul', value: 'technical' }, { label: 'Unsportsmanlike Foul', value: 'unsportsmanlike' }
+                ];
+                this.openDetailModal('Select Foul Type', options, (detail) => {
+                    const allPlayers = [...this.teams.home.players, ...this.teams.away.players];
+                    const player = allPlayers.find(p => p.id === playerId);
+                    if (player) { player.foulDetails[detail]++; player.personalFouls++; this.render(); }
+                    this.closeDetailModal();
+                });
+            },
+            
+            handleShot(playerId, type, made) {
+                const allPlayers = [...this.teams.home.players, ...this.teams.away.players];
+                const recordFinalShot = (location, subLocation = null) => {
+                    const player = allPlayers.find(p => p.id === playerId);
+                    if (!player) { this.closeDetailModal(); return; }
+                    player[`${type}a`]++;
+                    if (made) { player[`${type}m`]++; player.points += (type === 'fg2' ? 2 : 3); }
+                    player.shots.push({ type: type.toUpperCase(), made, location, subLocation });
+                    this.render();
+                    this.closeDetailModal();
+                };
+                const shotType = type === 'fg2' ? '2-Point' : '3-Point';
+                const locationOptions = type === 'fg2' 
+                    ? [{label: 'At Rim', value: 'At Rim'}, {label: 'Mid-Range', value: 'Mid-Range'}]
+                    : [{label: 'Corner', value: 'Corner'}, {label: '45°', value: '45°'}, {label: 'Top of Key', value: 'Top of Key'}];
+                this.openDetailModal(`Select ${shotType} Location`, locationOptions, (location) => {
+                    if (type === 'fg2' && location === 'At Rim') {
+                        const subLocationOptions = [
+                            {label: 'From Fastbreak', value: 'From Fastbreak'}, {label: 'From Turnover', value: 'From Turnover'},
+                            {label: 'Second Chance', value: 'Second Chance'}, {label: 'Build Up', value: 'Build Up'},
+                            {label: 'Normal Fastbreak', value: 'Normal Fastbreak'}
+                        ];
+                        this.openDetailModal('Select Rim Shot Type', subLocationOptions, (subLocation) => { recordFinalShot(location, subLocation); });
+                    } else {
+                        recordFinalShot(location);
+                    }
+                });
+            },
+            
+            handleFreeThrow(playerId, made) {
+                const allPlayers = [...this.teams.home.players, ...this.teams.away.players];
+                const player = allPlayers.find(p => p.id === playerId);
+                if (!player) return;
+                player.fta++;
+                if(made) { player.ftm++; player.points++; }
+                this.render();
+            },
+            
+            updateCoachNotes(playerId, text) {
+                const allPlayers = [...this.teams.home.players, ...this.teams.away.players];
+                const player = allPlayers.find(p => p.id === playerId);
+                if (player) { player.coachNotes = text; }
+            },
+            
+            handleRecord(playerId) {
+                const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+                if (!SpeechRecognition) { alert("Speech recognition not supported in this browser."); return; }
+                if (this.recognition && this.isRecordingPlayerId === playerId) { this.recognition.stop(); return; }
+                if (this.recognition) { this.recognition.stop(); }
+                this.recognition = new SpeechRecognition();
+                this.recognition.continuous = true; this.recognition.interimResults = true; this.recognition.lang = 'en-US';
+                this.isRecordingPlayerId = playerId;
+                this.recognition.onstart = () => { this.render(); };
+                this.recognition.onend = () => { this.isRecordingPlayerId = null; this.recognition = null; this.render(); };
+                this.recognition.onerror = (event) => { console.error('Speech recognition error:', event.error); this.isRecordingPlayerId = null; this.recognition = null; this.render(); };
+                this.recognition.onresult = (event) => {
+                    const allPlayers = [...this.teams.home.players, ...this.teams.away.players];
+                    const player = allPlayers.find(p => p.id === playerId);
+                    const notesArea = this.container.querySelector(`#notes-${playerId}`);
+                    if (!player || !notesArea) return;
+                    let finalTranscript = '';
+                    for (let i = event.resultIndex; i < event.results.length; ++i) {
+                        if (event.results[i].isFinal) { finalTranscript += event.results[i][0].transcript; }
+                    }
+                    if (finalTranscript) { notesArea.value += finalTranscript.trim() + ' '; player.coachNotes = notesArea.value; }
+                };
+                this.recognition.start();
+            },
+
+            handleKeyPress(e) {
+                if (['INPUT', 'TEXTAREA'].includes(e.target.tagName)) return;
+                if (!document.getElementById('detailModal').classList.contains('hidden')) return;
+                const key = e.key.toUpperCase();
+                if (key === ' ') {
+                    e.preventDefault();
+                    if (this.isGameTimerRunning) {
+                        this.stopAllTimers();
+                    } else {
+                        this.handleSubstitutionAndResume();
+                    }
+                    return;
+                }
+                if (!isNaN(parseInt(key, 10))) {
+                    clearTimeout(this.numberInputTimeout);
+                    this.numberInputBuffer += key;
+                    this.numberInputTimeout = setTimeout(() => {
+                        const targetPlayer = this.teams[this.activeTeam].players.find(p => p.number === this.numberInputBuffer);
+                        if (targetPlayer) {
+                            this.selectedPlayerId = targetPlayer.id;
+                            this.render();
+                        }
+                        this.numberInputBuffer = '';
+                    }, 400);
+                    return;
+                }
+                this.numberInputBuffer = '';
+                clearTimeout(this.numberInputTimeout);
+                if (!this.selectedPlayerId) return;
+                if (this.shotSequenceBuffer && ['M', 'X'].includes(key)) {
+                    const type = this.shotSequenceBuffer;
+                    const made = key === 'M';
+                    clearTimeout(this.foulTimeout);
+                    this.foulTimeout = null;
+                    this.shotSequenceBuffer = '';
+                    if (type === '2') this.handleShot(this.selectedPlayerId, 'fg2', made);
+                    if (type === '3') this.handleShot(this.selectedPlayerId, 'fg3', made);
+                    if (type === 'F') this.handleFreeThrow(this.selectedPlayerId, made);
+                    return;
+                }
+                switch (key) {
+                    case 'R': this.handleReboundClick(this.selectedPlayerId); break;
+                    case 'A': this.incrementStat(this.selectedPlayerId, 'assists'); break;
+                    case 'T': this.handleTurnoverClick(this.selectedPlayerId); break;
+                    case 'S': this.incrementStat(this.selectedPlayerId, 'steals'); break;
+                    case 'B': this.incrementStat(this.selectedPlayerId, 'blocks'); break;
+                    case 'P': this.incrementStat(this.selectedPlayerId, 'timesBlocked'); break;
+                    case '2': case '3':
+                        this.shotSequenceBuffer = key;
+                        clearTimeout(this.foulTimeout);
+                        this.foulTimeout = null;
+                        break;
+                    case 'F':
+                        this.shotSequenceBuffer = 'F';
+                        this.foulTimeout = setTimeout(() => {
+                            if (this.shotSequenceBuffer === 'F') {
+                                this.handleFoulClick(this.selectedPlayerId);
+                                this.shotSequenceBuffer = '';
+                            }
+                        }, 400);
+                        break;
+                    default:
+                        this.shotSequenceBuffer = '';
+                        clearTimeout(this.foulTimeout);
+                        this.foulTimeout = null;
+                        break;
+                }
+            },
+            
+            formatTime(seconds) {
+                const m = Math.floor(seconds / 60).toString().padStart(2, '0');
+                const s = (seconds % 60).toString().padStart(2, '0');
+                return `${m}:${s}`;
+            },
+
+            async generateReport() {
+                const reportData = { teams: this.teams };
+                try {
+                    const response = await fetch('/api/save-report.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(reportData)
+                    });
+                    const result = await response.json();
+                    if (result.success) {
+                        const reportLink = document.getElementById('reportLink');
+                        reportLink.href = result.report_url;
+                        reportLink.textContent = window.location.origin + '/' + result.report_url;
+                        document.getElementById('reportModal').classList.remove('hidden');
+                    } else {
+                        alert('Error saving report: ' + result.message);
+                    }
+                } catch (error) {
+                    console.error('Failed to save report:', error);
+                    alert('A network error occurred while saving the report.');
+                }
+            },
+
+            render() {
+                const gameTimerDisplay = this.container.querySelector('#gameTimerDisplay');
+                const gameTimerButton = this.container.querySelector('#gameTimerBtn');
+                const homeTeamScoreboard = this.container.querySelector('#homeTeamScoreboard');
+                const awayTeamScoreboard = this.container.querySelector('#awayTeamScoreboard');
+                const homeTeamNameDisplay = this.container.querySelector('#homeTeamNameDisplay');
+                const awayTeamNameDisplay = this.container.querySelector('#awayTeamNameDisplay');
+                const homeTeamScore = this.container.querySelector('#homeTeamScore');
+                const awayTeamScore = this.container.querySelector('#awayTeamScore');
+
+                if (gameTimerDisplay) gameTimerDisplay.textContent = this.formatTime(this.gameTime);
+                if (gameTimerButton) {
+                    gameTimerButton.textContent = this.isGameTimerRunning ? 'Stop Game' : 'Start Game';
+                    gameTimerButton.classList.toggle('bg-red-600', this.isGameTimerRunning);
+                    gameTimerButton.classList.toggle('hover:bg-red-700', this.isGameTimerRunning);
+                    gameTimerButton.classList.toggle('bg-green-600', !this.isGameTimerRunning);
+                    gameTimerButton.classList.toggle('hover:bg-green-700', !this.isGameTimerRunning);
+                }
+                
+                homeTeamNameDisplay.textContent = this.teams.home.name;
+                awayTeamNameDisplay.textContent = this.teams.away.name;
+                homeTeamScore.textContent = this.teams.home.players.reduce((total, p) => total + p.points, 0);
+                awayTeamScore.textContent = this.teams.away.players.reduce((total, p) => total + p.points, 0);
+                
+                this.selectHomeTeamButton.style.setProperty('--team-color', this.teams.home.color);
+                this.selectAwayTeamButton.style.setProperty('--team-color', this.teams.away.color);
+                this.selectHomeTeamButton.classList.toggle('active', this.activeTeam === 'home');
+                this.selectAwayTeamButton.classList.toggle('active', this.activeTeam === 'away');
+                
+                this.players = [...this.teams.home.players, ...this.teams.away.players];
+
+                ['home', 'away'].forEach(teamKey => {
+                    const listEl = this.container.querySelector(`#${teamKey}StarterList`);
+                    const team = this.teams[teamKey];
+                    if (team.players.length > 0) {
+                        listEl.innerHTML = team.players.map(p => `
+                            <div class="flex items-center">
+                                <input type="checkbox" id="player-start-${p.id}" data-player-id="${p.id}" class="player-checkbox w-4 h-4 text-blue-600 bg-gray-700 border-gray-600 rounded focus:ring-blue-500" ${this.gameTime > 0 ? 'disabled' : ''}>
+                                <label for="player-start-${p.id}" class="ml-2 text-sm font-medium text-gray-300">${p.name} (#${p.number})</label>
+                            </div>
+                        `).join('');
+                    } else {
+                        listEl.innerHTML = `<p class="text-slate-400 text-sm">Add players to this team.</p>`;
+                    }
+                });
+
+                if (!this.isGameTimerRunning && this.gameTime > 0) {
+                    this.substitutionContainer.classList.remove('hidden');
+                    this.substitutionContainer.classList.add('grid');
+                    const activeTeam = this.teams[this.activeTeam];
+                    const playersInGame = activeTeam.players.filter(p => activeTeam.lastPlaying.includes(p.id));
+                    const playersOnBench = activeTeam.players.filter(p => !activeTeam.lastPlaying.includes(p.id));
+                    this.subOutList.innerHTML = playersInGame.map(p => `<div class="flex items-center"><input type="radio" name="sub-out" value="${p.id}" id="sub-out-${p.id}" class="w-4 h-4"><label for="sub-out-${p.id}" class="ml-2 text-sm">${p.name}</label></div>`).join('');
+                    this.subInList.innerHTML = playersOnBench.map(p => `<div class="flex items-center"><input type="radio" name="sub-in" value="${p.id}" id="sub-in-${p.id}" class="w-4 h-4"><label for="sub-in-${p.id}" class="ml-2 text-sm">${p.name}</label></div>`).join('');
+                } else {
+                    this.substitutionContainer.classList.add('hidden');
+                    this.substitutionContainer.classList.remove('grid');
+                }
+
+                this.scoutingPanel.innerHTML = this.players.map(p => {
+                    const isSelected = p.id === this.selectedPlayerId;
+                    const teamColor = this.teams.home.players.includes(p) ? this.teams.home.color : this.teams.away.color;
+                    return `
+                    <div class="card p-3 rounded-lg shadow-md w-full sm:w-[calc(50%-0.5rem)] md:w-[calc(33.333%-0.67rem)] lg:w-[calc(25%-0.75rem)] xl:w-[calc(20%-0.8rem)] 2xl:w-[calc(10%-0.9rem)] flex flex-col transition-all duration-200 ${isSelected ? 'ring-2 ring-orange-400' : ''}" style="border-top: 4px solid ${teamColor};">
+                        <div class="flex justify-between items-start mb-3 pb-2">
+                            <div>
+                                <h3 class="text-lg font-bold text-slate-100">${p.name}</h3>
+                                <p class="text-sm text-slate-400">#${p.number}</p>
+                                <div class="flex items-center mt-2">
+                                    <span class="h-3 w-3 rounded-full ${p.isTimerRunning ? 'bg-green-500' : 'bg-slate-500'} mr-2"></span>
+                                    <span class="text-xs font-semibold">${p.isTimerRunning ? 'In Game' : 'On Bench'}</span>
+                                </div>
+                            </div>
+                            <div class="text-right">
+                                <button class="timer-btn ${p.isTimerRunning ? 'active' : 'bg-green-600'} text-white font-semibold py-2 px-3 rounded-md text-xs" onclick="app.handleTimer(${p.id})">
+                                    ${p.isTimerRunning ? 'STOP' : 'START'}
+                                </button>
+                                <p class="text-xl font-mono font-bold mt-1">${this.formatTime(p.minutes)}</p>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-4 gap-2 mb-3 text-center">
+                            <div><p class="text-lg font-bold">${p.points}</p><p class="text-[10px] text-slate-400">PTS</p></div>
+                            <div><p class="text-lg font-bold">${p.rebounds}</p><button class="btn-stat text-[10px] bg-slate-600 w-full mt-1 py-0.5 rounded" onclick="app.handleReboundClick(${p.id})">REB</button></div>
+                            <div><p class="text-lg font-bold">${p.assists}</p><button class="btn-stat text-[10px] bg-slate-600 w-full mt-1 py-0.5 rounded" onclick="app.incrementStat(${p.id}, 'assists')">AST</button></div>
+                            <div><p class="text-lg font-bold">${p.turnovers}</p><button class="btn-stat text-[10px] bg-slate-600 w-full mt-1 py-0.5 rounded" onclick="app.handleTurnoverClick(${p.id})">TO</button></div>
+                            <div><p class="text-lg font-bold">${p.steals}</p><button class="btn-stat text-[10px] bg-slate-600 w-full mt-1 py-0.5 rounded" onclick="app.incrementStat(${p.id}, 'steals')">STL</button></div>
+                            <div><p class="text-lg font-bold">${p.blocks}</p><button class="btn-stat text-[10px] bg-slate-600 w-full mt-1 py-0.5 rounded" onclick="app.incrementStat(${p.id}, 'blocks')">BLK</button></div>
+                            <div><p class="text-lg font-bold">${p.personalFouls}</p><button class="btn-stat text-[10px] bg-slate-600 w-full mt-1 py-0.5 rounded" onclick="app.handleFoulClick(${p.id})">FOUL</button></div>
+                            <div><p class="text-lg font-bold">${p.timesBlocked}</p><button class="btn-stat text-[10px] bg-slate-600 w-full mt-1 py-0.5 rounded" onclick="app.incrementStat(${p.id}, 'timesBlocked')">S.BLK</button></div>
+                        </div>
+                        <div class="border-t border-slate-600 pt-3 mb-3">
+                            <h4 class="font-semibold mb-2 text-center text-sm">Shooting</h4>
+                            <div class="grid grid-cols-3 gap-2">
+                                <div class="card p-1.5 rounded-md border border-slate-600 text-center">
+                                    <p class="font-bold text-xs">2-PT</p><p class="text-sm font-mono my-1">${p.fg2m}-${p.fg2a}</p>
+                                    <div class="flex justify-center gap-1">
+                                        <button class="btn-stat bg-green-500 text-white text-xs font-bold py-1 px-2 rounded" onclick="app.handleShot(${p.id}, 'fg2', true)">M</button>
+                                        <button class="btn-stat bg-red-500 text-white text-xs font-bold py-1 px-2 rounded" onclick="app.handleShot(${p.id}, 'fg2', false)">X</button>
+                                    </div>
+                                </div>
+                                <div class="card p-1.5 rounded-md border border-slate-600 text-center">
+                                    <p class="font-bold text-xs">3-PT</p><p class="text-sm font-mono my-1">${p.fg3m}-${p.fg3a}</p>
+                                    <div class="flex justify-center gap-1">
+                                        <button class="btn-stat bg-green-500 text-white text-xs font-bold py-1 px-2 rounded" onclick="app.handleShot(${p.id}, 'fg3', true)">M</button>
+                                        <button class="btn-stat bg-red-500 text-white text-xs font-bold py-1 px-2 rounded" onclick="app.handleShot(${p.id}, 'fg3', false)">X</button>
+                                    </div>
+                                </div>
+                                <div class="card p-1.5 rounded-md border border-slate-600 text-center">
+                                    <p class="font-bold text-xs">FT</p><p class="text-sm font-mono my-1">${p.ftm}-${p.fta}</p>
+                                    <div class="flex justify-center gap-1">
+                                        <button class="btn-stat bg-green-500 text-white text-xs font-bold py-1 px-2 rounded" onclick="app.handleFreeThrow(${p.id}, true)">M</button>
+                                        <button class="btn-stat bg-red-500 text-white text-xs font-bold py-1 px-2 rounded" onclick="app.handleFreeThrow(${p.id}, false)">X</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="border-t border-slate-600 pt-3 mt-auto">
+                             <h4 class="font-semibold mb-1 text-center text-sm">Coach Notes</h4>
+                             <div class="relative">
+                                <textarea id="notes-${p.id}" class="w-full bg-slate-800 border border-slate-600 rounded-md p-2 text-sm" rows="2" oninput="app.updateCoachNotes(${p.id}, this.value)">${p.coachNotes}</textarea>
+                                <button class="record-btn ${this.isRecordingPlayerId === p.id ? 'active' : 'bg-blue-600'} absolute bottom-2 right-2 text-white p-2 rounded-full h-8 w-8 flex items-center justify-center" onclick="app.handleRecord(${p.id})">
+                                    <i class="fas fa-microphone"></i>
+                                </button>
+                             </div>
+                        </div>
+                    </div>
+                `}).join('');
+            }
+        };
+
+        const dashboard = {
+            initialize: (role) => {
+                document.getElementById('login-screen').classList.add('hidden');
+                document.getElementById('dashboard').classList.remove('hidden');
+                
+                if (role === 'admin') {
+                    document.getElementById('admin-link').classList.remove('hidden');
+                    dashboard.setupAdminPanel();
+                } else {
+                    document.getElementById('players-link').classList.remove('hidden');
+                    dashboard.setupCoachPanel();
+                }
+                
+                dashboard.loadScoutingApp();
+                dashboard.loadReportsList();
+                dashboard.setupNavigation();
+            },
+
+            setupNavigation: () => {
+                const navLinks = document.querySelectorAll('.nav-link');
+                const tabContents = document.querySelectorAll('.tab-content');
+                navLinks.forEach(link => {
+                    link.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        navLinks.forEach(nav => nav.classList.remove('active'));
+                        link.classList.add('active');
+                        tabContents.forEach(content => content.classList.add('hidden'));
+                        document.getElementById(link.dataset.tab).classList.remove('hidden');
+                    });
+                });
+            },
+
+            loadScoutingApp: () => {
+                const template = document.getElementById('scouting-app-template');
+                const scoutingContent = document.getElementById('scouting-content');
+                if (scoutingContent.childElementCount === 0) {
+                    const clone = template.content.cloneNode(true);
+                    scoutingContent.appendChild(clone);
+                    app.init(scoutingContent);
+                }
+            },
+
+            loadReportsList: async () => {
+                const reportsList = document.getElementById('reports-list');
+                const response = await fetch('/api/get_reports.php');
+                const result = await response.json();
+                if (result.success) {
+                    reportsList.innerHTML = result.reports.map(report => `
+                        <a href="report.php?id=${report.id}" target="_blank" class="block card p-4 rounded-md hover:bg-gray-700">
+                            <h4 class="font-semibold text-lg">${report.home_team_name} vs ${report.away_team_name}</h4>
+                            <p class="text-sm text-gray-400">${report.game_date}</p>
+                        </a>
+                    `).join('');
+                }
+            },
+            
+            setupAdminPanel: () => {
+                const createUserBtn = document.getElementById('createUserBtn');
+                const newUserUsernameInput = document.getElementById('newUsername');
+                const newPasswordInput = document.getElementById('newPassword');
+                const createUserError = document.getElementById('create-user-error');
+                const createUserSuccess = document.getElementById('create-user-success');
+                const createTeamBtn = document.getElementById('adminCreateTeamBtn');
+                const newTeamNameInput = document.getElementById('adminNewTeamName');
+                const coachSelect = document.getElementById('coach-select');
+
+                createUserBtn.addEventListener('click', async () => {
+                    const username = newUserUsernameInput.value;
+                    const password = newPasswordInput.value;
+                    
+                    createUserError.classList.add('hidden');
+                    createUserSuccess.classList.add('hidden');
+
+                    const response = await fetch('/api/create_user.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ username, password })
+                    });
+                    const result = await response.json();
+
+                    if (result.success) {
+                        createUserSuccess.textContent = `Coach "${username}" created successfully!`;
+                        createUserSuccess.classList.remove('hidden');
+                        newUserUsernameInput.value = '';
+                        newPasswordInput.value = '';
+                        loadUserList();
+                    } else {
+                        createUserError.textContent = result.message || 'Failed to create user.';
+                        createUserError.classList.remove('hidden');
+                    }
+                });
+
+                createTeamBtn.addEventListener('click', async () => {
+                    const teamName = newTeamNameInput.value;
+                    const userId = coachSelect.value;
+                    const response = await fetch('/api/create_team.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ teamName: teamName, user_id: userId })
+                    });
+                     const result = await response.json();
+                     if(result.success) {
+                        newTeamNameInput.value = '';
+                        alert('Team created and assigned!');
+                     }
+                });
+
+                async function loadUserList() {
+                    const userList = document.getElementById('user-list');
+                    const response = await fetch('/api/get_users.php');
+                    const result = await response.json();
+                    if (result.success) {
+                        userList.innerHTML = result.users.map(user => `
+                            <div class="bg-slate-800 p-2 rounded flex justify-between items-center">
+                                <span>${user.username}</span>
+                            </div>
+                        `).join('');
+                        coachSelect.innerHTML = result.users.map(user => `<option value="${user.id}">${user.username}</option>`).join('');
+                    }
+                }
+                
+                loadUserList();
+            },
+
+            setupCoachPanel: () => {
+                const createTeamBtn = document.getElementById('createTeamBtn');
+                const newTeamNameInput = document.getElementById('newTeamName');
+                const addRosterPlayerBtn = document.getElementById('addRosterPlayerBtn');
+                const newRosterPlayerName = document.getElementById('newRosterPlayerName');
+                const newRosterPlayerNumber = document.getElementById('newRosterPlayerNumber');
+                const teamSelectRoster = document.getElementById('team-select-roster');
+                
+                createTeamBtn.addEventListener('click', async () => {
+                    const teamName = newTeamNameInput.value;
+                    const response = await fetch('/api/create_team.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ teamName })
+                    });
+                    const result = await response.json();
+                    if(result.success) {
+                        newTeamNameInput.value = '';
+                        loadTeams();
+                    }
+                });
+
+                addRosterPlayerBtn.addEventListener('click', async () => {
+                    const playerName = newRosterPlayerName.value;
+                    const playerNumber = newRosterPlayerNumber.value;
+                    const teamId = teamSelectRoster.value;
+                    const response = await fetch('/api/add_player_to_roster.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ teamId, playerName, playerNumber })
+                    });
+                    const result = await response.json();
+                    if(result.success) {
+                        newRosterPlayerName.value = '';
+                        newRosterPlayerNumber.value = '';
+                        loadRoster(teamId);
+                    }
+                });
+                
+                teamSelectRoster.addEventListener('change', (e) => loadRoster(e.target.value));
+
+                async function loadTeams() {
+                    const teamsList = document.getElementById('teams-list');
+                    const response = await fetch('/api/get_teams.php');
+                    const result = await response.json();
+                    if (result.success) {
+                        teamsList.innerHTML = result.teams.map(t => `<div class="bg-slate-800 p-2 rounded">${t.team_name}</div>`).join('');
+                        teamSelectRoster.innerHTML = result.teams.map(t => `<option value="${t.id}">${t.team_name}</option>`).join('');
+                        if (result.teams.length > 0) {
+                            loadRoster(result.teams[0].id);
+                        }
+                    }
+                }
+
+                async function loadRoster(teamId) {
+                    const rosterList = document.getElementById('roster-list');
+                    if (!teamId) {
+                        rosterList.innerHTML = '';
+                        return;
+                    }
+                    const response = await fetch(`/api/get_roster.php?team_id=${teamId}`);
+                    const result = await response.json();
+                    if (result.success) {
+                        rosterList.innerHTML = result.players.map(p => `
+                            <div class="bg-slate-800 p-2 rounded">${p.player_name} (#${p.player_number})</div>
+                        `).join('');
+                    }
+                }
+
+                loadTeams();
+            }
+        };
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            const loginScreen = document.getElementById('login-screen');
+            const dashboardEl = document.getElementById('dashboard');
+            const loginBtn = document.getElementById('loginBtn');
+            const logoutBtn = document.getElementById('logoutBtn');
+            const usernameInput = document.getElementById('username');
+            const passwordInput = document.getElementById('password');
+            const loginError = document.getElementById('login-error');
+
+            loginScreen.classList.remove('hidden');
+
+            loginBtn.addEventListener('click', async () => {
+                const username = usernameInput.value;
+                const password = passwordInput.value;
+                
+                try {
+                    const response = await fetch('/api/login.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ username, password })
+                    });
+                    const result = await response.json();
+
+                    if (result.success) {
+                        dashboard.initialize(result.role);
+                    } else {
+                        loginError.textContent = result.message || 'Invalid credentials.';
+                        loginError.classList.remove('hidden');
+                    }
+                } catch (error) {
+                    loginError.textContent = 'An error occurred. Please try again.';
+                    loginError.classList.remove('hidden');
+                }
+            });
+
+            logoutBtn.addEventListener('click', async () => {
+                await fetch('/api/logout.php');
+                window.location.reload();
+            });
+        });
+    </script>
+</body>
+</html>
