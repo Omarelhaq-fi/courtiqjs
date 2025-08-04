@@ -1,0 +1,15 @@
+<h1 class="text-3xl font-bold mb-6 text-orange-400">My Scouting Reports</h1>
+<div class="bg-gray-800 rounded-lg shadow overflow-hidden">
+    <ul class="divide-y divide-gray-700">
+        <% if (reports.length > 0) { %>
+            <% reports.forEach(function(report) { %>
+                <li class="p-4 hover:bg-gray-700 flex justify-between items-center">
+                    <a href="/report/<%= report.id %>" target="_blank" class="text-orange-400 hover:text-orange-300 font-semibold"><%= report.title %></a>
+                    <span class="text-sm text-gray-400"><%= new Date(report.created_at).toLocaleDateString() %></span>
+                </li>
+            <% }); %>
+        <% } else { %>
+            <li class="p-4 text-gray-500">No reports found.</li>
+        <% } %>
+    </ul>
+</div>
