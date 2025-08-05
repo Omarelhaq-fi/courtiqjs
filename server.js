@@ -124,11 +124,21 @@ app.post('/login', (req, res) => {
                 if (bcryptErr || !passwordMatch) {
                     return res.render('login', { error: 'Incorrect Username and/or Password!' });
                 }
+                
+                // Password is correct! Set up the session.
                 req.session.loggedin = true;
                 req.session.username = user.username;
                 req.session.userId = user.id;
                 req.session.role = user.role;
-                res.redirect('/dashboard');
+                
+                // Save the session before redirecting to ensure it's written
+                req.session.save((err) => {
+                    if (err) {
+                        // if there's an error saving the session, log it and proceed
+                        console.error('Session save error:', err);
+                    }
+                    res.redirect('/dashboard');
+                });
             });
         });
     } else {
