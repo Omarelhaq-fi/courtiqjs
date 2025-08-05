@@ -3,6 +3,7 @@
 const express = require('express');
 const mysql = require('mysql');
 const session = require('express-session');
+const MySQLStore = require('connect-mysql-session')(session); // <-- Import the session store
 const bodyParser = require('body-parser');
 const path = require('path');
 const ejs = require('ejs');
@@ -29,13 +30,29 @@ db.connect((err) => {
     console.log('Connected to MySQL database');
 });
 
+// --- Session Store Setup ---
+const sessionStore = new MySQLStore({
+    // Options for the session store
+    clearExpired: true,
+    checkExpirationInterval: 900000, // How frequently to clear expired sessions
+    expiration: 86400000, // The maximum age of a session
+}, db); // Pass the database connection
+
 // --- Middleware ---
+// Use the new MySQLStore for session management
 app.use(session({
+    key: 'courtiq_session', // A unique name for your session cookie
     secret: 'a-very-strong-and-long-secret-key-for-coaches-app',
+    store: sessionStore,
     resave: false,
-    saveUninitialized: true,
-    cookie: { secure: process.env.NODE_ENV === 'production' }
+    saveUninitialized: false, // This is a best practice
+    cookie: {
+        secure: true, // Set to true if your site is on HTTPS (Vercel provides this)
+        httpOnly: true,
+        sameSite: 'lax' // Helps protect against CSRF attacks
+    }
 }));
+
 
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
@@ -131,18 +148,13 @@ app.post('/login', (req, res) => {
                 req.session.userId = user.id;
                 req.session.role = user.role;
                 
-                // Save the session before redirecting to ensure it's written
-                req.session.save((err) => {
-                    if (err) {
-                        // if there's an error saving the session, log it and proceed
-                        console.error('Session save error:', err);
-                    }
-                    res.redirect('/dashboard');
-                });
+                // The session store now handles saving automatically.
+                // We can redirect directly.
+                res.redirect('/dashboard');
             });
         });
     } else {
-        res.render('login', { error: 'Please enter Username and Password!' });
+        res.render('login', { error: 'Please enter Username and/or Password!' });
     }
 });
 
