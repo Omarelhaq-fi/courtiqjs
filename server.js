@@ -3,7 +3,7 @@
 const express = require('express');
 const mysql = require('mysql');
 const session = require('express-session');
-const MySQLStore = require('connect-mysql-session')(session); // <-- Import the session store
+const MySQLStore = require('express-mysql-session')(session); // <-- This line is updated
 const bodyParser = require('body-parser');
 const path = require('path');
 const ejs = require('ejs');
@@ -154,7 +154,7 @@ app.post('/login', (req, res) => {
             });
         });
     } else {
-        res.render('login', { error: 'Please enter Username and/or Password!' });
+        res.render('login', { error: 'Please enter Username and Password!' });
     }
 });
 
