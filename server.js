@@ -10,13 +10,12 @@ const ejs = require('ejs');
 const app = express();
 
 // --- MySQL Connection ---
-// --- MySQL Connection (Manual Configuration) ---
+// Your database credentials have been added here directly.
 const db = mysql.createConnection({
-    host: 'sql112.infinityfree.com', // Replace with your actual host
-    user: 'if0_39626865',
-    password: 'mp6VQ6URz6E76',
-    database: 'if0_39626865_courtiqjs', // Replace with your actual DB name
-    port: 3306
+    host: 'mysql6013.site4now.net',
+    user: 'abc901_courtiq',
+    password: 'omarreda123',
+    database: 'db_abc901_courtiq'
 });
 
 db.connect((err) => {
@@ -138,7 +137,7 @@ app.get('/coach/scouting-panel', checkAuth, (req, res) => {
         
         // If no teams, render the panel without players.
         if (teams.length === 0) {
-            return res.render('partials/scouting-panel', { teams: [], players: [] });
+            return res.render('partials/scouting-panel', { teams: [], players: [], selectedTeamId: null });
         }
         
         // Fetch players for the first team by default, or based on a query param.
